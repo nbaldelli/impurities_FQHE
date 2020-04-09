@@ -9,6 +9,7 @@ import numpy as np
 from scipy import sparse as spr
 from scipy.sparse import linalg
 import itertools
+from numba import njit,jit
 
 # calculate logarithm of factorial
 def logfac(num):
@@ -58,8 +59,8 @@ def vhal(m1,m2,m3,m4,v0,v1):
                 out=out+C1*C2*v[i];
     return round(np.real(np.double(out)),11)
 
-L=30
-Ne=5
+L=21   
+Ne=4
 Nh=1
 
 gee=1; geh=1; we=1; wh=1.001
@@ -71,6 +72,7 @@ Lmax=np.int(L-Nh*(Nh-1)/2); # largest allowed total angular momentum of electron
 d=Lmax-Lmin+1 # number of angular momentum sectors
 De=np.zeros(d,dtype=np.int64); # dimension of electronic Hilbert space sectors
 Dh=np.zeros(d,dtype=np.int64); # dimension of the impurity Hilbert space
+De=np.zeros(d,dtype=np.int64)
 
 # special case: there are no impurities 
 if (Nh==0):
@@ -86,18 +88,38 @@ allchoices=np.array(list(itertools.combinations(larr,Ne)))
 
 ebase=np.zeros((len(allchoices),d)) #python cannot create dynamical arrays
 elist=np.zeros((sum(2**(allchoices[-1,:]))+1,2)) 
-for i in range(len(allchoices[:,0])):
-    Le=sum(allchoices[i,:]); # angular momentum of a given configuration i
-    sector=Le-Lmin; # to which sector does it correspond
-    
-    if (sector>=0)and(sector<d):
-        De[sector]=De[sector]+1 # then Hilbert space dimension increases by 1
-        num=0
-        for j in range(Ne):
-            num=num+2.**allchoices[i,j]
-        ebase[De[sector]-1,sector]=int(num) #the first index goes as long as I have states to put!!
-        elist[int(num),:]=[sector,De[sector]] #understand how I could do this
-    
+
+
+def configmaj(allchoices,Lmin,d):
+    for i in range(len(allchoices[:,0])):
+        Le=sum(allchoices[i,:]); # angular momentum of a given configuration i
+        sector=Le-Lmin; # to which sector does it correspond
+        if (sector>=0)and(sector<d):
+            De[sector]=De[sector]+1 # then Hilbert space dimension increases by 1
+            num=0
+            for j in range(Ne):
+                num=num+2.**allchoices[i,j]
+            ebase[De[sector]-1,sector]=int(num) #the first index goes as long as I have states to put!!
+            elist[int(num),:]=[sector,De[sector]] #understand how I could do this
+    return ebase,elist
+
+#ebase=[[0]*d]*len(allchoices)
+#elist=[[0,0]]*sum(2**(allchoices[-1,:]))
+#
+#@njit
+#def configmaj2(allchoices,Lmin,d):
+#    De=[0]*d
+#    for i in range(len(allchoices[:,0])):
+#        Le=sum(allchoices[i,:]); # angular momentum of a given configuration i
+#        sector=Le-Lmin; # to which sector does it correspond
+#        if (sector>=0)and(sector<d):
+#            De[sector]=De[sector]+1 # then Hilbert space dimension increases by 1
+#            num=0
+#            num=sum(2.**allchoices[i,:])
+#            ebase[De[sector]-1][sector]=int(num) #the first index goes as long as I have states to put!!
+#            elist[int(num)][:]=[sector,De[sector]] #understand how I could do this
+#    return ebase,elist
+
 # CONFIGURATIONS FOR MINORITY PARTICLES
 # (Essentially the same as for majority particles, as we take both of them
 # to be fermionic)
@@ -119,6 +141,8 @@ if (Nh>0):
             
 D=De*Dh; # This is a vector with Hilbert space dimension in each sector, being the product De(sector) X Dh(sector)
 Dtot=sum(D) # summing over all sector: total Hilbert space dimension
+print(Dtot)
+print(d)
 
 # this is a vector with powers of 2, we will use it to relate
 # configurations to binary numbers
@@ -135,14 +159,15 @@ for k1 in range(lmax+1):
                 vmin[k1,k2,k3,k4]=vhal(k1,k2,k3,k4,1,0)
 
 # matrix elements for e-e interactions
-iee=np.array([]); jee=np.array([]); vee=np.array([]);
+iee=[]; jee=[]; vee=[];
 # matrix elements for e-h interactions
-ieh=np.array([]); jeh=np.array([]); veh=np.array([]);
+ieh=[]; jeh=[]; veh=[];
 # matrix element traps
-htrap=np.array([])
-etrap=np.array([])
+htrap=[]
+etrap=[]
 
 for sec in range(d): # loop over all sectors
+    print(sec)
     for ih in range(Dh[sec]): # loop over all impurity configuration in the sector
         
         if (Nh>0): # if we have no impurities, the impurity has not been defined, therefore the "if" 
@@ -154,7 +179,7 @@ for sec in range(d): # loop over all sectors
     #        % the command -'0' transform the number into a vector, 
     #        % i.e 101-'0'  -->  (1,0,1)
             
-            hoccs=lmax-np.flip(np.argwhere(hbin)[:,0]) #THIS ONE IS IN THE WRONG ORDER. tHAT MEANS 
+            hoccs=lmax-np.flip(np.argwhere(hbin)[:,0]) 
     #        % e.g. (1,0,0,1,1) -> (0,1,4) [we have chosen the smaller levels to
     #        % be on the right, so level on the right has angular momentum 0,
     #        % increasing to lmax=4, being the level on the left]
@@ -174,8 +199,8 @@ for sec in range(d): # loop over all sectors
 #            % diagonal parts of the matrix from the harmonic trap - depends
 #            % only on the total angular momentum of majority and impurity
 #            % particles
-            etrap=np.append(etrap,sec+Lmin)
-            htrap=np.append(htrap,L-Lmin-sec)
+            etrap.append(sec+Lmin)
+            htrap.append(L-Lmin-sec)
             
 #            % interactions between majority particles (block diagonal within a sector)
             choices=np.array(list(itertools.combinations(eoccs,2))); # choose two occupied levels to be annihilated          
@@ -208,9 +233,9 @@ for sec in range(d): # loop over all sectors
     #                    % (i.e. combined basis of majority and impurity)
                         outt=sum(D[:sec])+(ih)*De[sec]+ieout-1 #CAPIRE QUESTO
     #                    % we save the matrix in a sparse format, we need three lists
-                        iee=np.append(iee,inn) # this is the index for the incoming state
-                        jee=np.append(jee,outt) # this is the inces for the outcoming state
-                        vee=np.append(vee,v2); # this is the interaction strength of the scatter process connecting the states
+                        iee.append(inn) # this is the index for the incoming state
+                        jee.append(outt) # this is the inces for the outcoming state
+                        vee.append(v2); # this is the interaction strength of the scatter process connecting the states
             # Interaction between impurities and majority particles
             if (Nh>0):
                 for jj1 in range(len(eoccs)):
@@ -225,21 +250,24 @@ for sec in range(d): # loop over all sectors
                            if (l3>-1)and(l3<lmax+1)and(newebin[lmax-l4]==0)and(newhbin[lmax-l3]==0):    
                                newebin[lmax-l4]=1;    newhbin[lmax-l3]=1; 
                                if ((np.dot(lmax-larr,newebin))<=Lmax): 
-                                   sig=(-1)**(Ne+Nh-jj1-jj2) # annihilators have to pass over jjx-1 occupied levels
+                                   sig=(-1)**(jj1+jj2) # annihilators have to pass over jjx-1 occupied levels
                                    occs2=np.setdiff1d(eoccs,l1)
                                    cc=len(np.where(occs2<l4)[0]) # how many occupied levels must electron creator pass
                                    occs2=np.setdiff1d(hoccs,l2)
                                    dd=len(np.where(occs2<l3)[0]) # how many occupied levels must impurity creator pass
-                                   sig=sig*(-1)**(cc+dd)  
+                                   sig=sig*(-1)**(cc+dd)
                                    v2=sig*vmin[l4,l3,l2,l1] # vhal(l4,l3,l2,l1,1,0);
-                                       ieout=int(elist[int(np.dot(newebin,pots)),1])
+                                   ieout=int(elist[int(np.dot(newebin,pots)),1])
                                    ihout=int(hlist[int(np.dot(newhbin,pots)),1])
                                    secout=int(elist[int(np.dot(newebin,pots)),0])
                                    
                                    outt=sum(D[:(secout)])+(ihout-1)*De[secout]+ieout-1;
-                                   ieh=np.append(ieh,inn) # this is the index for the incoming state
-                                   jeh=np.append(jeh,outt) # this is the inces for the outcoming state
-                                   veh=np.append(veh,v2); # this is the interaction strength of the scatter process connecting the states
+                                   ieh.append(inn) # this is the index for the incoming state
+                                   jeh.append(outt) # this is the inces for the outcoming state
+                                   veh.append(v2) # this is the interaction strength of the scatter process connecting the states
+
+ieh=np.array(ieh); jeh=np.array(jeh); veh=np.array(veh);
+iee=np.array(iee); jee=np.array(jee); vee=np.array(vee);
 
 # Build the sparse matrices from the lists we have produced
 vehmat=spr.coo_matrix((veh,(ieh.astype(np.int),jeh.astype(np.int))),shape=(Dtot,Dtot))
@@ -247,30 +275,24 @@ veemat=spr.coo_matrix((vee,(iee.astype(np.int),jee.astype(np.int))),shape=(Dtot,
 etrapmat=spr.coo_matrix((etrap,(np.arange(0,Dtot),np.arange(0,Dtot))))
 htrapmat=spr.coo_matrix((htrap,(np.arange(0,Dtot),np.arange(0,Dtot))),shape=(Dtot,Dtot))
 
-#del( vehmat, veemat, etrapmat, htrapmat, ieh, jeh, veh, iee, jee, vee)
-
 hmat=gee*veemat+geh*vehmat+we*etrapmat+wh*htrapmat
 
-#diagonalize the matrix
-vals,vecs=linalg.eigsh(hmat,k=20,which='SM') 
-# eig(hmat
+del( vehmat, veemat, etrapmat, htrapmat, ieh, jeh, veh, iee, jee, vee)
 
-# [laval,I] = sort(real(diag(laval)));
-# lavec = lavec(:, I);
-# GS=lavec(:,1);
-# 
-# % evaluate the total angular momentum of the majority particles within
-# % each of the eigenstates
-# i=1;Lel=zeros(nol,1);
-# for sec=1:d
-#    for e=1:nol
-#    Lel(e)=Lel(e)+(Lmin+sec-1)*dot(lavec(i:i+D(sec)-1,e),lavec(i:i+D(sec)-1,e));
-#    end
-#    i=i+D(sec);
-# end
-# [laval,Lel,L-Lel]
-# 
-# end
-#    
+#diagonalize the matrix
+nol=20
+vals1,vecs=linalg.eigsh(hmat,k=nol,which='SM') 
+
+#% evaluate the total angular momentum of the majority particles within
+#% each of the eigenstates
+i=0;Lel=np.zeros(nol)
+for sec in range(d):
+    for e in range(nol):
+        Lel[e]=Lel[e]+(Lmin+sec)*np.dot(vecs[i:i+D[sec],e],vecs[i:i+D[sec],e]);
+    i=i+D[sec];
+    
+print(Lel)
+print(L-Lel) 
+
 
 
