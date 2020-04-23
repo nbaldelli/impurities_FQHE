@@ -27,12 +27,14 @@ def LLL(x,y,m):
 #calculate pseudopotential matrix elements 
 #(here only for two pseudopotentials vo and v1, at filling 1/5 we need also v2 and v3, different code)
 
-def vhal(m1,m2,m3,m4,v0,v1):
+def vhal(m1,m2,m3,m4,v0,v1,v2,v3):
     #define the haldane pseudopotentials
-    l=2
-    v=np.array([0,0])
+    l=4
+    v=np.array([0,0,0,0])
     v[0]=v0
     v[1]=v1
+    v[2]=v2
+    v[3]=v3
     out=0
     if (m1+m2-m3-m4==0):
         for i in range(l):
@@ -59,12 +61,11 @@ def vhal(m1,m2,m3,m4,v0,v1):
                 out=out+C1*C2*v[i];
     return round(np.real(np.double(out)),11)
 
-L=21   
+L=27
 Ne=4
-Nh=1
+Nh=2
 
-gee=1; geh=1; we=1; wh=1.001
-
+gee=1; geh=1; we=1; wh=1
 lmax=3*(Ne-1)+7; #truncation of single particle angumom WHY
 Lmin=np.int(max(Ne*(Ne-1)/2,L-Nh*(2*lmax-Nh+1)/2)); # smallest possible total angular momentum of electrons
 Lmax=np.int(L-Nh*(Nh-1)/2); # largest allowed total angular momentum of electrons
@@ -86,39 +87,19 @@ if (Nh==0):
 larr=np.arange(0,lmax+1)
 allchoices=np.array(list(itertools.combinations(larr,Ne)))
 
-ebase=np.zeros((len(allchoices),d)) #python cannot create dynamical arrays
-elist=np.zeros((sum(2**(allchoices[-1,:]))+1,2)) 
+ebase=np.zeros((len(allchoices),d),dtype=np.int32) #python cannot create dynamical arrays
+elist=np.zeros(((2**allchoices[-1,-1])+2**(Lmin+d-allchoices[-1,-1]),2)) 
 
-
-def configmaj(allchoices,Lmin,d):
-    for i in range(len(allchoices[:,0])):
-        Le=sum(allchoices[i,:]); # angular momentum of a given configuration i
-        sector=Le-Lmin; # to which sector does it correspond
-        if (sector>=0)and(sector<d):
-            De[sector]=De[sector]+1 # then Hilbert space dimension increases by 1
-            num=0
-            for j in range(Ne):
-                num=num+2.**allchoices[i,j]
-            ebase[De[sector]-1,sector]=int(num) #the first index goes as long as I have states to put!!
-            elist[int(num),:]=[sector,De[sector]] #understand how I could do this
-    return ebase,elist
-
-#ebase=[[0]*d]*len(allchoices)
-#elist=[[0,0]]*sum(2**(allchoices[-1,:]))
-#
-#@njit
-#def configmaj2(allchoices,Lmin,d):
-#    De=[0]*d
-#    for i in range(len(allchoices[:,0])):
-#        Le=sum(allchoices[i,:]); # angular momentum of a given configuration i
-#        sector=Le-Lmin; # to which sector does it correspond
-#        if (sector>=0)and(sector<d):
-#            De[sector]=De[sector]+1 # then Hilbert space dimension increases by 1
-#            num=0
-#            num=sum(2.**allchoices[i,:])
-#            ebase[De[sector]-1][sector]=int(num) #the first index goes as long as I have states to put!!
-#            elist[int(num)][:]=[sector,De[sector]] #understand how I could do this
-#    return ebase,elist
+for i in range(len(allchoices[:,0])):
+    Le=sum(allchoices[i,:]); # angular momentum of a given configuration i
+    sector=Le-Lmin; # to which sector does it correspond
+    if (sector>=0)and(sector<d):
+        De[sector]=De[sector]+1 # then Hilbert space dimension increases by 1
+        num=0
+        for j in range(Ne):
+            num=num+2.**allchoices[i,j]
+        ebase[De[sector]-1,sector]=int(num) #the first index goes as long as I have states to put!!
+        elist[int(num),:]=[sector,De[sector]] #understand how I could do this
 
 # CONFIGURATIONS FOR MINORITY PARTICLES
 # (Essentially the same as for majority particles, as we take both of them
@@ -155,8 +136,8 @@ for k1 in range(lmax+1):
     for k2 in range(lmax+1):
         for k3 in range(lmax+1):
             for k4 in range(lmax+1):
-                vmaj[k1,k2,k3,k4]=vhal(k1,k2,k3,k4,0,1)
-                vmin[k1,k2,k3,k4]=vhal(k1,k2,k3,k4,1,0)
+                vmaj[k1,k2,k3,k4]=vhal(k1,k2,k3,k4,0,1,0,0)
+                vmin[k1,k2,k3,k4]=vhal(k1,k2,k3,k4,1,0,0,0)
 
 # matrix elements for e-e interactions
 iee=[]; jee=[]; vee=[];
@@ -190,7 +171,7 @@ for sec in range(d): # loop over all sectors
             eoccs=lmax-np.flip(np.argwhere(ebin)[:,0]);  # occupied angular momentum levels
             eemps=np.setdiff1d(larr,eoccs);  # empty angular momentum levels
 
-            inn=sum(D[:sec])+(ih)*De[sec]+ie; #penso che sto numero sia abbastanza arbitrario
+            inn=(sum(D[:sec])+(ih)*De[sec]+ie).astype(np.int32); #penso che sto numero sia abbastanza arbitrario
 #            % here we define a unique number of the state in the matrix, 
 #            % i.e. in a combined basis for majority and impurity.
 #            % obviously, this number is between 1 and D, and it's uniquely
@@ -231,7 +212,7 @@ for sec in range(d): # loop over all sectors
                         ieout=int(elist[int(np.dot(newebin,pots)),1]);
     #                    % This is the number of the new state in the matrix
     #                    % (i.e. combined basis of majority and impurity)
-                        outt=sum(D[:sec])+(ih)*De[sec]+ieout-1 #CAPIRE QUESTO
+                        outt=(sum(D[:sec])+(ih)*De[sec]+ieout-1).astype(np.int32) 
     #                    % we save the matrix in a sparse format, we need three lists
                         iee.append(inn) # this is the index for the incoming state
                         jee.append(outt) # this is the inces for the outcoming state
@@ -261,27 +242,24 @@ for sec in range(d): # loop over all sectors
                                    ihout=int(hlist[int(np.dot(newhbin,pots)),1])
                                    secout=int(elist[int(np.dot(newebin,pots)),0])
                                    
-                                   outt=sum(D[:(secout)])+(ihout-1)*De[secout]+ieout-1;
+                                   outt=(sum(D[:(secout)])+(ihout-1)*De[secout]+ieout-1).astype(np.int32);
                                    ieh.append(inn) # this is the index for the incoming state
                                    jeh.append(outt) # this is the inces for the outcoming state
                                    veh.append(v2) # this is the interaction strength of the scatter process connecting the states
 
-ieh=np.array(ieh); jeh=np.array(jeh); veh=np.array(veh);
-iee=np.array(iee); jee=np.array(jee); vee=np.array(vee);
-
 # Build the sparse matrices from the lists we have produced
-vehmat=spr.coo_matrix((veh,(ieh.astype(np.int),jeh.astype(np.int))),shape=(Dtot,Dtot))
-veemat=spr.coo_matrix((vee,(iee.astype(np.int),jee.astype(np.int))),shape=(Dtot,Dtot))
+vehmat=spr.coo_matrix((veh,(ieh,jeh)),shape=(Dtot,Dtot))
+veemat=spr.coo_matrix((vee,(iee,jee)),shape=(Dtot,Dtot))
 etrapmat=spr.coo_matrix((etrap,(np.arange(0,Dtot),np.arange(0,Dtot))))
 htrapmat=spr.coo_matrix((htrap,(np.arange(0,Dtot),np.arange(0,Dtot))),shape=(Dtot,Dtot))
 
 hmat=gee*veemat+geh*vehmat+we*etrapmat+wh*htrapmat
 
-del( vehmat, veemat, etrapmat, htrapmat, ieh, jeh, veh, iee, jee, vee)
+#del( vehmat, veemat, etrapmat, htrapmat, ieh, jeh, veh, iee, jee, vee)
 
 #diagonalize the matrix
-nol=20
-vals1,vecs=linalg.eigsh(hmat,k=nol,which='SM') 
+nol=30
+vals,vecs=linalg.eigsh(hmat,k=nol,which='SM') 
 
 #% evaluate the total angular momentum of the majority particles within
 #% each of the eigenstates
@@ -291,8 +269,22 @@ for sec in range(d):
         Lel[e]=Lel[e]+(Lmin+sec)*np.dot(vecs[i:i+D[sec],e],vecs[i:i+D[sec],e]);
     i=i+D[sec];
     
-print(Lel)
-print(L-Lel) 
+i=0;varl=np.zeros(nol)
+for sec in range(d):
+    for e in range(nol):
+        varl[e]=varl[e]+((Lmin+sec)**2)*np.dot(vecs[i:i+D[sec],e],vecs[i:i+D[sec],e]);
+    i=i+D[sec];
+std=np.sqrt(varl-Lel**2)
+#
+#np.savetxt('valsfer'+str(L)+str(Ne)+str(Nh),vals)
+#np.savetxt('angmfer'+str(L)+str(Ne)+str(Nh),L-Lel)
+#np.savetxt('stdevfer'+str(L)+str(Ne)+str(Nh),std)
+print(vals[0])
+print((L-Lel)[0])
+print(std[0])
 
+def mee(m,nu):
+    return (m+nu)/(1-nu)
 
-
+def stod(m,nu):
+    return np.sqrt(((1+m)*nu)/(nu-1)**2)

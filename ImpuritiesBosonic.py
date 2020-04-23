@@ -61,15 +61,15 @@ def vhal(m1,m2,m3,m4,v0,v1):
                 out=out+C1*C2*v[i];
     return round(np.real(np.double(out)),11)
 
-L=58
-Ne=6
-Nh=2
+L=9
+Ne=2
+Nh=3
 
-gee=1; geh=1; we=1; wh=1.001
+gee=1; geh=1; we=1; wh=1.00001
 
 lmax=3*(Ne-1)+7; #truncation of single particle angumom WHY
-Lmin=np.int(max(Ne*(Ne-1)/2,L-Nh*(2*lmax-Nh+1)/2)); # smallest possible total angular momentum of electrons
-Lmax=np.int(L-Nh*(Nh-1)/2); # largest allowed total angular momentum of electrons
+Lmin=np.int(max(Ne*(Ne-1)/2,L-Nh*(lmax))); # smallest possible total angular momentum of electrons
+Lmax=np.int(L); # largest allowed total angular momentum of electrons
 
 d=Lmax-Lmin+1 # number of angular momentum sectors
 De=np.zeros(d,dtype=np.int64); # dimension of electronic Hilbert space sectors
@@ -139,9 +139,9 @@ print(d)
 pots=2.**(lmax-np.arange(0,lmax+1))
 potsh=(Nh+1.)**(lmax-np.arange(0,lmax+1))
 
-#% that turns out to be faster than calling the function whenever we need it
+# that turns out to be faster than calling the function whenever we need it
 vmaj=np.zeros((lmax+1,lmax+1,lmax+1,lmax+1))
-vmin=np.zeros((lmax+1,lmax+1,lmax+1,lmax+1))
+vmin=np.zeros((lmax+1,lmax+1,lmax+1,lmax+1)) 
 for k1 in range(lmax+1):
     for k2 in range(lmax+1):
         for k3 in range(lmax+1):
@@ -157,6 +157,7 @@ ieh=[]; jeh=[]; veh=[];
 htrap=[]
 etrap=[]
 
+log1=[]
 for sec in range(d): # loop over all sectors
     print(sec)
     for ih in range(Dh[sec]): # loop over all impurity configuration in the sector
@@ -165,7 +166,8 @@ for sec in range(d): # loop over all sectors
             hbin=np.fromstring(np.base_repr(int(hbase[ih,sec]), base=Nh+1),dtype='S1').astype(int)
             hbin=np.pad(hbin,(lmax-len(hbin)+1,0),'constant',constant_values=(0,0))
             hoccs=lmax-np.flip(np.argwhere(hbin)[:,0]) 
-            
+            print(hoccs)
+            print(hbin)
         for ie in range(De[sec]):  # loop over all majority configurations
             ebin=np.fromstring(np.binary_repr(int(ebase[ie,sec])), dtype='S1').astype(int)
             ebin=np.pad(ebin,(lmax-len(ebin)+1,0),'constant',constant_values=(0,0))
@@ -219,10 +221,15 @@ for sec in range(d): # loop over all sectors
                         jee.append(outt) # this is the inces for the outcoming state
                         vee.append(v2) # this is the interaction strength of the scatter process connecting the states
             # Interaction between impurities and majority particles
+#            hbin=[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2]
+#            ebin=[0., 0., 0., 0., 0., 1., 0., 1., 0., 0., 0.]
+#            eoccs=np.array([3,5])
+#            hoccs=[0,0,1]
+
             if (Nh>0):
                 for jj1 in range(len(eoccs)):
                     l1=eoccs[jj1]
-                    for jj2 in range(len(hoccs)):
+                    for jj2 in range(len(np.nonzero(hbin)[0])):
                         l2=hoccs[jj2]
                         for l4 in range(lmax+1):
                            newhbin=np.zeros(len(hbin))
@@ -257,14 +264,11 @@ htrapmat=spr.coo_matrix((htrap,(np.arange(0,Dtot),np.arange(0,Dtot))),shape=(Dto
 
 hmat=gee*veemat+geh*vehmat+we*etrapmat+wh*htrapmat
 
-del( vehmat, veemat, etrapmat, htrapmat, ieh, jeh, veh, iee, jee, vee)
+del(veemat, etrapmat, htrapmat, ieh, jeh, veh, iee, jee, vee)
 
 #diagonalize the matrix
-vals,vecs=linalg.eigsh(hmat,k=20,which='SM') 
-
-#diagonalize the matrix
-nol=20
-vals1,vecs=linalg.eigsh(hmat,k=nol,which='SM') 
+nol=10
+vals,vecs=linalg.eigsh(hmat,k=nol,which='SM') 
 
 #% evaluate the total angular momentum of the majority particles within
 #% each of the eigenstates
@@ -273,8 +277,8 @@ for sec in range(d):
     for e in range(nol):
         Lel[e]=Lel[e]+(Lmin+sec)*np.dot(vecs[i:i+D[sec],e],vecs[i:i+D[sec],e]);
     i=i+D[sec];
-    
-print(Lel)
+#    
+print(vals)
 print(L-Lel) 
 
 
