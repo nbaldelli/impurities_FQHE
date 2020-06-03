@@ -10,7 +10,6 @@ import numpy as np
 from scipy import sparse as spr
 from scipy.sparse import linalg
 import itertools
-from scipy.sparse import csr_matrix 
 
 
 # calculate logarithm of factorial
@@ -87,31 +86,24 @@ if (Nh==0):
 larr=np.arange(0,lmax+1)
 allchoices=np.array(list(itertools.combinations(larr,Ne)))
 
-ebase=np.zeros((len(allchoices),d)) #python cannot create dynamical arrays
-elist=np.zeros((sum(2**(allchoices[-1,:]))+1,2)) 
+ebase={} #python cannot create dynamical arrays
+elist={}
 for i in range(len(allchoices[:,0])):
     Le=sum(allchoices[i,:]); # angular momentum of a given configuration i
     sector=Le-Lmin; # to which sector does it correspond
-    
     if (sector>=0)and(sector<d):
         De[sector]=De[sector]+1 # then Hilbert space dimension increases by 1
         num=0
         for j in range(Ne):
             num=num+2.**allchoices[i,j]
-        ebase[De[sector]-1,sector]=int(num) #the first index goes as long as I have states to put!!
-        elist[int(num),:]=[sector,De[sector]] #understand how I could do this
+        ebase.update({(De[sector]-1,sector):int(num)})
+        elist.update({int(num):(sector,De[sector])})
     
-# CONFIGURATIONS FOR MINORITY PARTICLES
-# (Essentially the same as for majority particles, as we take both of them
-# to be fermionic)
-
+# CONFIGURATIONS FOR MINORITY PARTICLES (bosons)
 if (Nh>0):  
     allchoices=np.array(list(itertools.combinations_with_replacement(larr,Nh)))
-#    hbase=np.zeros((len(allchoices),d)) #python cannot create dynamical arrays
-#    hlist=np.zeros((sum((Nh+1)**(allchoices[-1,:].astype(np.int64)))+1,2))
-    numbers=np.array([],dtype=np.int64)
-    sectors=np.array([],dtype=np.int64)
-    hilbert=np.array([],dtype=np.int64)
+    hbase={} #python cannot create dynamical arrays
+    hlist={}
     
     for i in range(len(allchoices)):
         Lh=sum(allchoices[i,:])
@@ -121,13 +113,8 @@ if (Nh>0):
             num=0
             for j in range(Nh): #this can be simplified
                 num=num+(Nh+1)**allchoices[i,j].astype(np.int64)
-            numbers=np.append(numbers,num)
-            sectors=np.append(sectors,sector)
-            hilbert=np.append(hilbert,Dh[sector])
-#            hbase[Dh[sector]-1,sector]=int(num)
-#            hlist[int(num)]=[sector,Dh[sector]]
-    hbase=csr_matrix((numbers,(hilbert-1,sectors)))
-    hlist=csr_matrix((hilbert,(numbers,[0]*len(numbers))))
+            hbase.update({(Dh[sector]-1,sector):int(num)})
+            hlist.update({int(num):(sector,Dh[sector])})
             
 D=De*Dh; # This is a vector with Hilbert space dimension in each sector, being the product De(sector) X Dh(sector)
 Dtot=sum(D) # summing over all sector: total Hilbert space dimension
@@ -221,10 +208,6 @@ for sec in range(d): # loop over all sectors
                         jee.append(outt) # this is the inces for the outcoming state
                         vee.append(v2) # this is the interaction strength of the scatter process connecting the states
             # Interaction between impurities and majority particles
-#            hbin=[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2]
-#            ebin=[0., 0., 0., 0., 0., 1., 0., 1., 0., 0., 0.]
-#            eoccs=np.array([3,5])
-#            hoccs=[0,0,1]
 
             if (Nh>0):
                 for jj1 in range(len(eoccs)):
@@ -234,7 +217,7 @@ for sec in range(d): # loop over all sectors
                         for l4 in range(lmax+1):
                            newhbin=np.zeros(len(hbin))
                            newebin=np.zeros(len(ebin))               
-                           newebin[:]=ebin[:];     newhbin[:]=hbin[:];       newebin[lmax-l1]=0;   newhbin[lmax-l2]-=1 ;
+                           newebin[:]=ebin[:];     newhbin[:]=hbin[:];  newebin[lmax-l1]=0;   newhbin[lmax-l2]-=1 ;
                            l3=l1+l2-l4; # conservation of angular momentum ISN'T THIS REDUNDANT
                            if (l3>-1)and(l3<lmax+1)and(newebin[lmax-l4]==0):    
                                newebin[lmax-l4]=1;    newhbin[lmax-l3]+=1; 

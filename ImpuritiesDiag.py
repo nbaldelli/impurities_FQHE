@@ -9,7 +9,7 @@ import numpy as np
 from scipy import sparse as spr
 from scipy.sparse import linalg
 import itertools
-from numba import njit,jit
+from numba import njit
 import time
 
 @njit
@@ -77,9 +77,9 @@ def hpspot(lmax):
 
 tic=time.time()
 
-L=22
+L=27
 Ne=4
-Nh=1
+Nh=2
 
 gee=1; geh=1; we=1; wh=1
 lmax=3*(Ne-1)+7; #truncation of single particle angumom WHY
@@ -240,7 +240,7 @@ for sec in range(d): # loop over all sectors
 
 toc=time.time()
 print(toc-tic)
-
+np.savez_compressed('data'+str(L)+str(Ne)+str(Nh),iee=iee,ieh=ieh,jee=jee,jeh=jeh,vee=vee,veh=veh)
 # Build the sparse matrices from the lists we have produced
 vehmat=spr.coo_matrix((veh,(ieh,jeh)),shape=(Dtot,Dtot))
 veemat=spr.coo_matrix((vee,(iee,jee)),shape=(Dtot,Dtot))
@@ -278,5 +278,26 @@ print((L-Lel)[0])
 print(std[0])
 
 
+@njit
+def factorial(n): #factorial of a number
+    if n==0:
+        return 1
+    if n==1:
+        return 1
+    else:
+        return n*factorial(n-1)
+
+@njit
+def v3b(m1,m2,m3): #half of three body interaction potential for moore-read states
+    M=m1+m2+m3
+    return np.sqrt(factorial(M-1)/(2*3**M*factorial(m1)*factorial(m2)*factorial(m3)))*m2*m1*(m1-1)
+
+@njit
+def u3b(m1,m2,m3,m4,m5,m6): #three body interaction potential for moore-read states
+    out=0
+    if (m1+m2+m3-m4-m5-m6==0):    
+        out=((v3b(m1,m2,m3)-v3b(m2,m1,m3)+v3b(m2,m3,m1)-v3b(m3,m2,m1)+v3b(m3,m1,m2)-v3b(m1,m3,m2))*
+             (v3b(m4,m5,m6)-v3b(m5,m4,m6)+v3b(m5,m6,m4)-v3b(m6,m5,m4)+v3b(m6,m4,m5)-v3b(m4,m6,m5)))
+    return out
 
 
